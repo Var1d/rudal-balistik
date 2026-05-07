@@ -8,11 +8,11 @@
 
 | Nama | NIM | Tanggung Jawab |
 |------|-----|----------------|
-| Jamal Abdul Nasir | 247006111015 | Particle VFX (asap & ledakan) |
-| Fiqri Mochamad Fadillah | 247006111051 | Pencahayaan & Material |
-| Faisal Hadi Saik | 247006111052 | Kamera & Slow-Motion |
-| Irsyad Khoerul Umam | 247006111055 | Terrain, Skybox, Vegetasi |
-| Farid Dhiya Fairuz | 247006111058 | Model 3D & Texture Mapping |
+| Jamal Abdul Nasir | 247006111015 | |
+| Fiqri Mochamad Fadillah | 247006111051 | |
+| Faisal Hadi Saik | 247006111052 | |
+| Irsyad Khoerul Umam | 247006111055 | |
+| Farid Dhiya Fairuz | 247006111058 | Camera |
 
 ---
 
