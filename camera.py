@@ -13,6 +13,7 @@ camera.py
 """
 
 import math
+import random
 from OpenGL.GLU import gluLookAt
 
 # ── Konstanta mode ───────────────────────────────────────
@@ -50,6 +51,11 @@ class Camera:
         # Target posisi (tujuan lerp)
         self._t_eye  = [0.0, 7.0, 14.0]
         self._t_look = [0.0, 0.8,  0.0]
+        self.shake_amp = 0.0
+        self.shake_decay = 2.8
+        self.shake_x = 0.0
+        self.shake_y = 0.0
+        self.shake_z = 0.0
 
     # ── Mode ──────────────────────────────────────────────
     def set_mode(self, mode):
@@ -61,6 +67,11 @@ class Camera:
         self.dist       = 14.0
         self.angle      = 30.0
         self._orbit_ang = 30.0
+        self.shake_amp  = 0.0
+        self.shake_x = self.shake_y = self.shake_z = 0.0
+
+    def trigger_shake(self, amplitude):
+        self.shake_amp = max(self.shake_amp, amplitude)
 
     # ── Kontrol manual ─────────────────────────────────────
     def zoom_in(self):    self.dist = max(3.0,  self.dist - 0.6)
@@ -111,10 +122,19 @@ class Camera:
             self.eye[i]  = _lerp(self.eye[i],  self._t_eye[i],  t)
             self.look[i] = _lerp(self.look[i], self._t_look[i], t)
 
+        if self.shake_amp > 0.0005:
+            self.shake_amp *= math.exp(-self.shake_decay * dt)
+            self.shake_x = random.uniform(-1.0, 1.0) * self.shake_amp
+            self.shake_y = random.uniform(-1.0, 1.0) * self.shake_amp * 0.75
+            self.shake_z = random.uniform(-1.0, 1.0) * self.shake_amp
+        else:
+            self.shake_amp = 0.0
+            self.shake_x = self.shake_y = self.shake_z = 0.0
+
     # ── Apply ke OpenGL ────────────────────────────────────
     def apply(self):
         gluLookAt(
-            self.eye[0],  self.eye[1],  self.eye[2],
-            self.look[0], self.look[1], self.look[2],
+            self.eye[0] + self.shake_x,  self.eye[1] + self.shake_y,  self.eye[2] + self.shake_z,
+            self.look[0] + self.shake_x * 0.5, self.look[1] + self.shake_y * 0.5, self.look[2] + self.shake_z * 0.5,
             0.0, 1.0, 0.0
         )

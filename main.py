@@ -53,8 +53,8 @@ GRAVITY    = 9.8
 V0         = 80.0
 ANGLE_DEG  = 60.0
 SCALE      = 0.05
-TIMER_MS   = 16
-DT         = 0.016
+TIMER_MS   = 8
+DT         = 0.008
 
 # ────────────────────────────────────────────────────────
 #  State simulasi
@@ -95,6 +95,26 @@ def flight_time():
 def max_range():
     return V0 * V0 * math.sin(2.0 * angle_rad()) / GRAVITY
 
+def missile_tip_position(mx, my, sim_time):
+    # Panjang visual rudal kira-kira: body+cone = 0.74 unit OpenGL.
+    tip_len = 0.74
+    vx = V0 * math.cos(angle_rad())
+    vy = V0 * math.sin(angle_rad()) - GRAVITY * sim_time
+    sp = math.hypot(vx, vy)
+    if sp < 1e-6:
+        fx, fy = 1.0, 0.0
+    else:
+        fx, fy = vx / sp, vy / sp
+    return mx + fx * tip_len, my + fy * tip_len
+
+def tip_hits_bunker(tip_x, tip_y, target_x):
+    # AABB bunker (disesuaikan model bunker.py)
+    bunker_min_x = target_x - 0.32
+    bunker_max_x = target_x + 0.32
+    bunker_min_y = 0.08
+    bunker_max_y = 0.72
+    return bunker_min_x <= tip_x <= bunker_max_x and bunker_min_y <= tip_y <= bunker_max_y
+
 # ────────────────────────────────────────────────────────
 #  Slow-motion: aktif saat rudal hampir mendarat
 # ────────────────────────────────────────────────────────
@@ -121,6 +141,9 @@ def reset_sim():
     frame_cnt  = 0
     particles.reset()
     camera.reset()
+    camera.trigger_shake(0.10)
+    if renderer is not None:
+        renderer.reset_effects()
     glutTimerFunc(TIMER_MS, on_timer, 0)
 
 # ────────────────────────────────────────────────────────
@@ -147,6 +170,11 @@ def on_timer(value):
         missile_x = x
         missile_y = max(0.0, y)
 
+        # Tabrakan berdasarkan ujung moncong rudal (nose tip).
+        target_x = max_range() * SCALE
+        tip_x, tip_y = missile_tip_position(missile_x, missile_y, sim_t)
+        hit_bunker = tip_hits_bunker(tip_x, tip_y, target_x)
+
         # Emisi asap dari nosel
         vx_w = V0 * math.cos(angle_rad())
         vy_w = V0 * math.sin(angle_rad()) - GRAVITY * sim_t
@@ -160,16 +188,29 @@ def on_timer(value):
             IDLE, FLYING, EXPLODING, FINISHED
         )
 
-        if sim_t >= t_flight or pos_y(sim_t) <= 0.0:
+        if hit_bunker:
+            missile_x = tip_x
+            missile_y = max(0.0, tip_y)
+            particles.trigger_explosion(missile_x, missile_y)
+            camera.trigger_shake(0.42)
+            if renderer is not None:
+                renderer.trigger_impact(target_x)
+            state     = EXPLODING
+            explode_t = 0.0
+        elif sim_t >= t_flight or pos_y(sim_t) <= 0.0:
             missile_x = pos_x(t_flight) * SCALE
             missile_y = 0.0
             particles.trigger_explosion(missile_x, missile_y)
+            camera.trigger_shake(0.42)
+            if renderer is not None:
+                renderer.trigger_impact(missile_x)
             state     = EXPLODING
             explode_t = 0.0
         glutTimerFunc(TIMER_MS, on_timer, 0)
 
     elif state == EXPLODING:
         explode_t += dt_eff
+        particles.emit_ground_fire(missile_x, missile_y, dt_eff)
         particles.update(dt_eff)
         camera.update(
             dt_eff, state, missile_x, missile_y,

@@ -196,14 +196,40 @@ def draw_launcher():
 def draw_missile(x, y):
     vx  = V0 * math.cos(angle_rad())
     vy  = V0 * math.sin(angle_rad()) - GRAVITY * sim_t
-    ang = math.degrees(math.atan2(vy, vx))
+
+    def normalize3(vx_, vy_, vz_):
+        l = math.sqrt(vx_ * vx_ + vy_ * vy_ + vz_ * vz_)
+        if l < 1e-8:
+            return (0.0, 1.0, 0.0)
+        return (vx_ / l, vy_ / l, vz_ / l)
+
+    def cross(a, b):
+        return (
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        )
 
     q = gluNewQuadric()
 
     glPushMatrix()
     glTranslatef(x, y, 0.0)
-    glRotatef(ang, 0, 0, 1)
-    glRotatef(-90, 1, 0, 0)
+    forward = normalize3(vx, vy, 0.0)
+    world_up = (0.0, 1.0, 0.0)
+    right = cross(world_up, forward)
+    if math.sqrt(right[0] * right[0] + right[1] * right[1] + right[2] * right[2]) < 1e-6:
+        world_up = (0.0, 0.0, 1.0)
+        right = cross(world_up, forward)
+    right = normalize3(*right)
+    up = normalize3(*cross(forward, right))
+
+    rot = [
+        right[0], right[1], right[2], 0.0,
+        up[0], up[1], up[2], 0.0,
+        forward[0], forward[1], forward[2], 0.0,
+        0.0, 0.0, 0.0, 1.0,
+    ]
+    glMultMatrixf(rot)
 
     # badan
     glColor3f(0.85, 0.2, 0.2)

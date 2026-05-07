@@ -33,6 +33,18 @@ class SceneRenderer:
         self.trees           = []
         self._star_time      = 0.0
         self._stars          = []
+        self._clouds         = []
+        self.fog_color       = (0.06, 0.08, 0.14)
+        self.fog_density     = 0.028
+        self.launch_flash_t  = 0.0
+        self.scorch_active   = False
+        self.scorch_x        = 0.0
+        self.scorch_z        = 0.0
+        self.terrain_cols    = 140
+        self.terrain_rows    = 80
+        self.terrain_w       = 260.0
+        self.terrain_d       = 140.0
+        self.terrain_list_id = None
 
     # ── Inisialisasi setelah OpenGL context siap ──────────
     def init(self):
@@ -50,27 +62,16 @@ class SceneRenderer:
         self.launcher_obj = Launcher()
         self.bunker_obj   = Bunker()
 
-        # Tempatkan 3 kendaraan militer di scene
-        self.vehicles = [
-            Vehicle(x=-1.5, z= 0.4),
-            Vehicle(x=-2.2, z=-0.3),
-            Vehicle(x=-3.0, z= 0.1),
-        ]
+        # Kendaraan sisi launcher dikosongkan agar unit militer fokus di area bunker.
+        self.vehicles = []
 
         # Tempatkan pohon di sekitar area
         random.seed(7)
         self.trees = [
-            Tree(x=random.uniform(-8, -1),
-                 z=random.uniform(-4, 4),
+            Tree(x=random.uniform(-40, 60),
+                 z=random.uniform(-30, 30),
                  scale=random.uniform(0.8, 1.4))
-            for _ in range(20)
-        ]
-        # Tambah pohon di sisi kanan (dekat target)
-        self.trees += [
-            Tree(x=random.uniform(5, 9),
-                 z=random.uniform(-4, 4),
-                 scale=random.uniform(0.7, 1.2))
-            for _ in range(10)
+            for _ in range(40)
         ]
 
         # Generate bintang
@@ -79,13 +80,101 @@ class SceneRenderer:
             (random.uniform(-30,30), random.uniform(3,25),
              random.uniform(-20,20), random.uniform(1.5,4.0),
              random.uniform(0, 6.28), random.uniform(0.5,2.5))
-            for _ in range(380)
+            for _ in range(220)
+        ]
+
+        # Awan procedural
+        random.seed(11)
+        self._clouds = [
+            {
+                "x": random.uniform(-140.0, 220.0),
+                "y": random.uniform(7.0, 22.0),
+                "z": random.uniform(-90.0, 90.0),
+                "s": random.uniform(1.2, 3.6),
+                "a": random.uniform(0.10, 0.22),
+                "spd": random.uniform(0.2, 0.9),
+            }
+            for _ in range(42)
         ]
 
         # Setup pencahayaan
         self._setup_lighting()
+        self._build_terrain_display_list()
 
         print("[SCENE] Inisialisasi selesai.")
+
+    @staticmethod
+    def _terrain_h(x, z):
+        v  = 0.55 * math.sin(x * 0.055) * math.cos(z * 0.047)
+        v += 0.33 * math.sin((x + z) * 0.082)
+        v += 0.24 * math.cos((x - z) * 0.067)
+        v += 0.14 * math.sin(x * 0.21 + 0.8) * math.sin(z * 0.19 - 1.1)
+        corridor = math.exp(-(z * z) / 1200.0)
+        lane = math.exp(-((x - 8.0) * (x - 8.0)) / 2400.0)
+        flatten = corridor * lane
+        return v * (1.0 - 0.55 * flatten)
+
+    def _terrain_normal(self, x, z):
+        e = 0.16
+        h_l = self._terrain_h(x - e, z)
+        h_r = self._terrain_h(x + e, z)
+        h_d = self._terrain_h(x, z - e)
+        h_u = self._terrain_h(x, z + e)
+        nx = h_l - h_r
+        ny = 2.0 * e
+        nz = h_d - h_u
+        inv = 1.0 / max(math.sqrt(nx * nx + ny * ny + nz * nz), 1e-6)
+        return (nx * inv, ny * inv, nz * inv)
+
+    def _terrain_color(self, hv):
+        if hv < -0.02:
+            return (0.06, 0.22, 0.06)
+        if hv < 0.04:
+            return (0.10, 0.35, 0.10)
+        if hv < 0.09:
+            return (0.18, 0.42, 0.14)
+        return (0.38, 0.32, 0.14)
+
+    def _build_terrain_display_list(self):
+        if self.terrain_list_id is not None:
+            glDeleteLists(self.terrain_list_id, 1)
+        self.terrain_list_id = glGenLists(1)
+        glNewList(self.terrain_list_id, GL_COMPILE)
+
+        COLS, ROWS = self.terrain_cols, self.terrain_rows
+        W, D = self.terrain_w, self.terrain_d
+        X0, Z0 = -120.0, -90.0
+        dx = W / COLS
+        dz = D / ROWS
+
+        for row in range(ROWS):
+            z0 = Z0 + row * dz
+            z1 = Z0 + (row + 1) * dz
+            glBegin(GL_TRIANGLE_STRIP)
+            for col_i in range(COLS + 1):
+                x = X0 + col_i * dx
+                h0 = self._terrain_h(x, z0)
+                h1 = self._terrain_h(x, z1)
+                n0 = self._terrain_normal(x, z0)
+                n1 = self._terrain_normal(x, z1)
+                c0 = self._terrain_color(h0)
+                c1 = self._terrain_color(h1)
+                glColor3f(*c0); glNormal3f(*n0); glVertex3f(x, h0, z0)
+                glColor3f(*c1); glNormal3f(*n1); glVertex3f(x, h1, z1)
+            glEnd()
+
+        glEndList()
+
+    def trigger_impact(self, target_x):
+        self.bunker_obj.trigger_destruction(target_x)
+        self.scorch_active = True
+        self.scorch_x = target_x
+        self.scorch_z = 0.0
+
+    def reset_effects(self):
+        self.bunker_obj.reset()
+        self.launch_flash_t = 0.0
+        self.scorch_active = False
 
     # ── Pencahayaan ────────────────────────────────────────
     def _setup_lighting(self):
@@ -114,6 +203,28 @@ class SceneRenderer:
         glLightfv(GL_LIGHT1, GL_CONSTANT_ATTENUATION,  [0.4])
         glLightfv(GL_LIGHT1, GL_LINEAR_ATTENUATION,    [0.2])
 
+    def _update_launch_light(self, x, y, intensity):
+        if intensity <= 0.0:
+            glDisable(GL_LIGHT2)
+            return
+        glEnable(GL_LIGHT2)
+        glLightfv(GL_LIGHT2, GL_POSITION, [x - 0.08, y, 0.0, 1.0])
+        glLightfv(GL_LIGHT2, GL_DIFFUSE,  [1.0 * intensity, 0.55 * intensity, 0.20 * intensity, 1.0])
+        glLightfv(GL_LIGHT2, GL_SPECULAR, [0.9 * intensity, 0.5 * intensity, 0.25 * intensity, 1.0])
+        glLightfv(GL_LIGHT2, GL_CONSTANT_ATTENUATION, [0.45])
+        glLightfv(GL_LIGHT2, GL_LINEAR_ATTENUATION,   [0.35])
+
+    def _apply_common_shader_uniforms(self, shader):
+        if not shader or not shader.valid:
+            return
+        shader.set_uniform_3f("uLightDirVS", 1.0, 2.5, 1.5)
+        shader.set_uniform_3f("uLightColor", 0.78, 0.80, 0.92)
+        shader.set_uniform_3f("uAmbientColor", 0.12, 0.13, 0.18)
+        shader.set_uniform_3f("uSpecColor", 1.0, 0.98, 0.95)
+        shader.set_uniform_f("uShininess", 40.0)
+        shader.set_uniform_3f("uFogColor", *self.fog_color)
+        shader.set_uniform_f("uFogDensity", self.fog_density)
+
     # ── Render utama ───────────────────────────────────────
     def render(self, state, missile_x, missile_y, sim_t,
                explode_t, t_flight, particles,
@@ -121,9 +232,15 @@ class SceneRenderer:
                max_range_m, angle_rad_fn,
                FLYING, EXPLODING, LAUNCHING, IDLE, FINISHED):
 
-        self._star_time += 0.016
+        dt = 0.016
+        self._star_time += dt
 
         tx = max_range_m * scale   # posisi X target dalam unit OpenGL
+        self.bunker_obj.update(dt)
+        if state == LAUNCHING:
+            self.launch_flash_t = min(1.0, self.launch_flash_t + dt * 3.5)
+        else:
+            self.launch_flash_t = max(0.0, self.launch_flash_t - dt * 1.8)
 
         # 1. Langit & bintang (depth write off)
         self._draw_sky()
@@ -135,13 +252,17 @@ class SceneRenderer:
         self._draw_axes()
 
         # 4. Pohon
+        if self.shader_default and self.shader_default.valid:
+            self.shader_default.use()
+            self._apply_common_shader_uniforms(self.shader_default)
+            self.shader_default.set_uniform_i("useTexture", 1)
         for tree in self.trees:
             tree.draw(self.tex)
 
         # 5. Launcher
         self.launcher_obj.draw(angle_deg, self.tex)
 
-        # 6. Kendaraan militer
+        # 6. Kendaraan militer (launcher-side opsional; saat ini kosong)
         for veh in self.vehicles:
             veh.draw(self.tex)
 
@@ -157,14 +278,23 @@ class SceneRenderer:
         if state in (FLYING, LAUNCHING):
             mx = 0.0 if state == LAUNCHING else missile_x
             my = 0.05 if state == LAUNCHING else missile_y
+            if self.shader_default and self.shader_default.valid:
+                self.shader_default.set_uniform_i("useTexture", 0)
             self.missile_obj.draw(mx, my, sim_t, v0, gravity,
                                   angle_rad_fn(), scale, self.tex)
+            boost = 0.75 + 0.25 * math.sin(self._star_time * 40.0)
+            self._update_launch_light(mx, my, (0.6 if state == FLYING else 1.0) * boost)
             particles.draw_smoke()
 
         elif state == EXPLODING:
             intensity = max(0.0, 1.0 - explode_t / 1.5)
             self._update_explosion_light(missile_x, 0.0, intensity)
+            self._update_launch_light(missile_x, missile_y, 0.0)
             particles.draw_explosion()
+        else:
+            self._update_launch_light(missile_x, missile_y, 0.0)
+
+        ShaderProgram.use_fixed()
 
         # 10. HUD (2D overlay, lighting mati)
         glDisable(GL_LIGHTING)
@@ -199,6 +329,23 @@ class SceneRenderer:
                 glEnd()
         glPointSize(1.0)
 
+        # Awan lembut
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        for c in self._clouds:
+            c["x"] += c["spd"] * 0.016
+            if c["x"] > 240.0:
+                c["x"] = -170.0
+            s = c["s"]
+            y = c["y"] + 0.3 * math.sin(self._star_time * 0.8 + c["z"])
+            glBegin(GL_QUADS)
+            glColor4f(0.78, 0.85, 0.95, c["a"])
+            glVertex3f(c["x"] - s, y - s * 0.30, c["z"])
+            glVertex3f(c["x"] + s, y - s * 0.30, c["z"])
+            glColor4f(0.78, 0.85, 0.95, 0.0)
+            glVertex3f(c["x"] + s * 0.5, y + s * 0.45, c["z"])
+            glVertex3f(c["x"] - s * 0.5, y + s * 0.45, c["z"])
+            glEnd()
+
         # Bulan sabit
         q = gluNewQuadric()
         glPushMatrix()
@@ -217,38 +364,38 @@ class SceneRenderer:
 
     # ── Terrain berbukit ───────────────────────────────────
     def _draw_terrain(self):
-        glDisable(GL_LIGHTING)
-        COLS, ROWS = 60, 30
-        W, D = 22.0, 12.0
-        X0, Z0 = -11.0, -6.0
-        dx = W / COLS
-        dz = D / ROWS
+        if self.shader_rough and self.shader_rough.valid:
+            self.shader_rough.use()
+            self._apply_common_shader_uniforms(self.shader_rough)
+            self.shader_rough.set_uniform_i("useTexture", 0)
+        else:
+            glDisable(GL_LIGHTING)
+        if self.terrain_list_id is not None:
+            glCallList(self.terrain_list_id)
 
-        def h(x, z):
-            v  = 0.08 * math.sin(x*0.9+0.5) * math.cos(z*1.1)
-            v += 0.05 * math.sin(x*1.8-1.0) * math.sin(z*0.7+2.0)
-            v += 0.03 * math.cos(x*3.0)     * math.sin(z*2.5)
-            flat = math.exp(-x*x*0.5)
-            return v * (1.0 - flat*0.8)
+        if self.scorch_active:
+            # Bekas terbakar di titik impact.
+            glDisable(GL_LIGHTING)
+            glEnable(GL_BLEND)
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            for i in range(3):
+                r = 0.50 + i * 0.22
+                a = 0.20 - i * 0.05
+                glBegin(GL_TRIANGLE_FAN)
+                glColor4f(0.05, 0.03, 0.02, a)
+                glVertex3f(self.scorch_x, 0.012 + i * 0.0005, self.scorch_z)
+                for k in range(36):
+                    t = (k / 35.0) * math.tau
+                    glColor4f(0.08, 0.05, 0.03, 0.0)
+                    glVertex3f(
+                        self.scorch_x + math.cos(t) * r,
+                        0.012 + i * 0.0005,
+                        self.scorch_z + math.sin(t) * r * 0.65
+                    )
+                glEnd()
+            glEnable(GL_LIGHTING)
 
-        def col(hv):
-            if hv < -0.02: return (0.06,0.22,0.06)
-            elif hv < 0.04: return (0.10,0.35,0.10)
-            elif hv < 0.09: return (0.18,0.42,0.14)
-            else:           return (0.38,0.32,0.14)
-
-        for row in range(ROWS):
-            glBegin(GL_TRIANGLE_STRIP)
-            for col_i in range(COLS+1):
-                x  = X0 + col_i*dx
-                z0 = Z0 + row*dz
-                z1 = Z0 + (row+1)*dz
-                h0 = h(x, z0); h1 = h(x, z1)
-                c0 = col(h0);  c1 = col(h1)
-                glColor3f(*c0); glVertex3f(x, h0, z0)
-                glColor3f(*c1); glVertex3f(x, h1, z1)
-            glEnd()
-
+        ShaderProgram.use_fixed()
         glEnable(GL_LIGHTING)
 
     # ── Sumbu koordinat ────────────────────────────────────
