@@ -113,17 +113,4 @@ python main.py
 
 ---
 
-## Pembagian Tugas per File
 
-| File | Dikerjakan oleh |
-|------|----------------|
-| `main.py` + `camera.py` | Faisal Hadi Saik |
-| `particle_system.py` | Jamal Abdul Nasir |
-| `scene_renderer.py` + `shader_program.py` | Fiqri Mochamad Fadillah |
-| `objects/tree/` + terrain + skybox di `scene_renderer.py` | Irsyad Khoerul Umam |
-| `objects/missile/` + `objects/launcher/` + `objects/vehicle/` + `textures_manager.py` | Farid Dhiya Fairuz |
-| `objects/bunker/` | Semua anggota (bersama) |
-
----
-
-*Kelompok 58 – Program Studi Informatika – Fakultas Teknik – Universitas Siliwangi 2026*
