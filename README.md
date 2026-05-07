@@ -8,11 +8,11 @@
 
 | Nama | NIM | Tanggung Jawab |
 |------|-----|----------------|
-| Jamal Abdul Nasir | 247006111015 | Particle VFX (asap & ledakan) |
-| Fiqri Mochamad Fadillah | 247006111051 | Pencahayaan & Material |
-| Faisal Hadi Saik | 247006111052 | Kamera & Slow-Motion |
-| Irsyad Khoerul Umam | 247006111055 | Terrain, Skybox, Vegetasi |
-| Farid Dhiya Fairuz | 247006111058 | Model 3D & Texture Mapping |
+| Jamal Abdul Nasir | 247006111015 | |
+| Fiqri Mochamad Fadillah | 247006111051 | |
+| Faisal Hadi Saik | 247006111052 | |
+| Irsyad Khoerul Umam | 247006111055 | |
+| Farid Dhiya Fairuz | 247006111058 | Camera |
 
 ---
 
@@ -113,17 +113,4 @@ python main.py
 
 ---
 
-## Pembagian Tugas per File
 
-| File | Dikerjakan oleh |
-|------|----------------|
-| `main.py` + `camera.py` | Faisal Hadi Saik |
-| `particle_system.py` | Jamal Abdul Nasir |
-| `scene_renderer.py` + `shader_program.py` | Fiqri Mochamad Fadillah |
-| `objects/tree/` + terrain + skybox di `scene_renderer.py` | Irsyad Khoerul Umam |
-| `objects/missile/` + `objects/launcher/` + `objects/vehicle/` + `textures_manager.py` | Farid Dhiya Fairuz |
-| `objects/bunker/` | Semua anggota (bersama) |
-
----
-
-*Kelompok 58 – Program Studi Informatika – Fakultas Teknik – Universitas Siliwangi 2026*
