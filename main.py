@@ -43,8 +43,21 @@ from OpenGL.GLU  import *
 from OpenGL.GLUT import *
 
 # State input untuk free cam
-freecam_last_mouse = [None]
+mouse_locked = [True]
+ignore_mouse_warp = [False]
 last_idle_time = [time.perf_counter()]
+
+def lock_mouse():
+    mouse_locked[0] = True
+    glutSetCursor(GLUT_CURSOR_NONE)
+    # Pusatkan mouse di awal lock
+    cx = glutGet(GLUT_WINDOW_WIDTH) // 2
+    cy = glutGet(GLUT_WINDOW_HEIGHT) // 2
+    glutWarpPointer(cx, cy)
+
+def unlock_mouse():
+    mouse_locked[0] = False
+    glutSetCursor(GLUT_CURSOR_LEFT_ARROW)
 
 # ── Import modul internal ────────────────────────────────
 from camera          import Camera, CAM_FREE, CAM_CHASE, CAM_TARGET, CAM_ORBIT
@@ -278,6 +291,8 @@ def display():
         LAUNCHING    = LAUNCHING,
         IDLE         = IDLE,
         FINISHED     = FINISHED,
+        cam_mode     = camera.mode,
+        mouse_locked = mouse_locked[0]
     )
 
     glutSwapBuffers()
@@ -317,14 +332,23 @@ def keyboard(key, x, y):
         if state in (IDLE, FINISHED):
             reset_sim()
     elif key == b'\x1b':
-        sys.exit(0)
+        if mouse_locked[0]:
+            unlock_mouse()
+        else:
+            sys.exit(0)
     elif key in (b'r', b'R'): camera.reset()
     elif key == b'1':
         camera.set_mode(CAM_FREE)
-        freecam_last_mouse[0] = None
-    elif key == b'2': camera.set_mode(CAM_CHASE)
-    elif key == b'3': camera.set_mode(CAM_TARGET)
-    elif key == b'4': camera.set_mode(CAM_ORBIT)
+        lock_mouse()
+    elif key == b'2': 
+        camera.set_mode(CAM_CHASE)
+        unlock_mouse()
+    elif key == b'3': 
+        camera.set_mode(CAM_TARGET)
+        unlock_mouse()
+    elif key == b'4': 
+        camera.set_mode(CAM_ORBIT)
+        unlock_mouse()
     # Zoom/rotate hanya jika bukan free cam
     elif camera.mode != CAM_FREE:
         if key in (b'w', b'W'): camera.zoom_in()
@@ -355,16 +379,30 @@ def special_key_up(key, x, y):
 
 def mouse_motion(x, y):
     # Mouse movement untuk free cam
-    if camera.mode == CAM_FREE:
-        if freecam_last_mouse[0] is not None:
-            dx = x - freecam_last_mouse[0][0]
-            dy = y - freecam_last_mouse[0][1]
+    if camera.mode == CAM_FREE and mouse_locked[0]:
+        if ignore_mouse_warp[0]:
+            ignore_mouse_warp[0] = False
+            return
+
+        cx = glutGet(GLUT_WINDOW_WIDTH) // 2
+        cy = glutGet(GLUT_WINDOW_HEIGHT) // 2
+        
+        dx = x - cx
+        dy = y - cy
+        
+        if dx != 0 or dy != 0:
             camera.free_cam_mouse(dx, dy)
-        freecam_last_mouse[0] = (x, y)
-        glutPostRedisplay()
+            ignore_mouse_warp[0] = True
+            glutWarpPointer(cx, cy)
+            glutPostRedisplay()
 
 def mouse_passive(x, y):
     mouse_motion(x, y)
+
+def mouse_click(button, state_btn, x, y):
+    if button == GLUT_LEFT_BUTTON and state_btn == GLUT_DOWN:
+        if camera.mode == CAM_FREE and not mouse_locked[0]:
+            lock_mouse()
 
 # ────────────────────────────────────────────────────────
 #  Main
@@ -382,6 +420,7 @@ def main():
     print("-" * 56)
     print("  ENTER=Mulai  ESC=Keluar  1/2/3/4=Kamera")
     print("  FREE: W/S=Maju/Mundur  A/D=Geser Kiri/Kanan")
+    print("        Q/E=Naik/Turun")
     print("  PANAH: Atas/Bawah=Tengadah/Tunduk  Kiri/Kanan=Menoleh")
     print("  Mode lain: W/S=Zoom  A/D=Putar  R=Reset kamera")
     print("=" * 56)
@@ -403,6 +442,10 @@ def main():
     renderer = SceneRenderer()
     renderer.init()
 
+    # Initial lock if free cam
+    if camera.mode == CAM_FREE:
+        lock_mouse()
+
     glutDisplayFunc(display)
     glutReshapeFunc(reshape)
     glutKeyboardFunc(keyboard)
@@ -411,6 +454,7 @@ def main():
     glutSpecialUpFunc(special_key_up)
     glutMotionFunc(mouse_motion)
     glutPassiveMotionFunc(mouse_passive)
+    glutMouseFunc(mouse_click)
     glutIdleFunc(idle_update)
     glutMainLoop()
 

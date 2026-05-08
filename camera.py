@@ -80,6 +80,7 @@ class Camera:
         self._free_last_mouse = None
         self._free_move = {
             'w': False, 's': False, 'a': False, 'd': False,
+            'q': False, 'e': False,
             'up': False, 'down': False, 'left': False, 'right': False
         }
 
@@ -102,11 +103,13 @@ class Camera:
     def update_free_cam(self, dt):
         dir_x = dir_y = dir_z = 0.0
         
-        # Pergerakan WASD
+        # Pergerakan WASD + QE
         if self._free_move['w']: dir_z += 1.0  # Maju
         if self._free_move['s']: dir_z -= 1.0  # Mundur
         if self._free_move['a']: dir_x -= 1.0  # Kiri
         if self._free_move['d']: dir_x += 1.0  # Kanan
+        if self._free_move['q']: dir_y += 1.0  # Atas
+        if self._free_move['e']: dir_y -= 1.0  # Bawah
         
         # Rotasi Panah (Menoleh)
         if self._free_move['left']:  self._free_target_yaw -= self.free_rot_speed * dt

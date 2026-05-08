@@ -230,7 +230,8 @@ class SceneRenderer:
                explode_t, t_flight, particles,
                angle_deg, v0, gravity, scale,
                max_range_m, angle_rad_fn,
-               FLYING, EXPLODING, LAUNCHING, IDLE, FINISHED):
+               FLYING, EXPLODING, LAUNCHING, IDLE, FINISHED,
+               cam_mode=0, mouse_locked=False):
 
         dt = 0.016
         self._star_time += dt
@@ -301,7 +302,8 @@ class SceneRenderer:
         self._draw_hud(state, sim_t, t_flight, missile_x,
                        missile_y, max_range_m, angle_deg, v0,
                        gravity, scale, angle_rad_fn,
-                       IDLE, FLYING, EXPLODING, LAUNCHING, FINISHED)
+                       IDLE, FLYING, EXPLODING, LAUNCHING, FINISHED,
+                       cam_mode, mouse_locked)
         glEnable(GL_LIGHTING)
 
     # ── Sky & Bintang ──────────────────────────────────────
@@ -443,8 +445,8 @@ class SceneRenderer:
     def _draw_hud(self, state, sim_t, t_flight, mx, my,
                   max_range_m, angle_deg, v0, gravity, scale,
                   angle_rad_fn, IDLE, FLYING, EXPLODING,
-                  LAUNCHING, FINISHED):
-        from camera import CAM_NAMES
+                  LAUNCHING, FINISHED, cam_mode, mouse_locked):
+        from camera import CAM_NAMES, CAM_FREE
         w = glutGet(GLUT_WINDOW_WIDTH)
         h = glutGet(GLUT_WINDOW_HEIGHT)
 
@@ -465,6 +467,12 @@ class SceneRenderer:
             f"{2*v0*math.sin(angle_rad_fn())/gravity:.2f} s",
             0.75, 1.0, 0.75)
 
+        # Info Kamera
+        cam_info = f"KAMERA: {CAM_NAMES[cam_mode]}"
+        if cam_mode == CAM_FREE and not mouse_locked:
+            cam_info += " (Klik untuk kunci mouse)"
+        self._draw_text(10, h-85, cam_info, 0.5, 0.8, 1.0)
+
         status_map = {
             IDLE:      ("[ IDLE ]  Tekan ENTER untuk mulai",   0.7,0.7,0.7),
             LAUNCHING: ("[ LAUNCHING ]  Rudal bersiap...",     0.2,0.8,1.0),
@@ -484,12 +492,23 @@ class SceneRenderer:
                 f"Posisi : X={v0*math.cos(angle_rad_fn())*sim_t:.1f} m  "
                 f"Y={py:.1f} m")
 
-        self._draw_text(w-270, h-22,
-            "1/2/3/4=Kamera  W/S=Zoom  A/D=Putar  R=Reset",
-            0.50, 0.50, 0.50)
-        self._draw_text(w-270, h-38,
-            "ENTER=Mulai/Ulang           ESC=Keluar",
-            0.50, 0.50, 0.50)
+        # Bantuan Kontrol
+        self._draw_text(w-320, h-22, "KONTROL DASAR:", 0.8, 0.8, 0.8)
+        self._draw_text(w-320, h-38, "1/2/3/4 : Ganti Kamera", 0.6, 0.6, 0.6)
+        self._draw_text(w-320, h-54, "ENTER   : Mulai/Ulang", 0.6, 0.6, 0.6)
+        self._draw_text(w-320, h-70, "ESC     : Keluar", 0.6, 0.6, 0.6)
+
+        if cam_mode == CAM_FREE:
+            self._draw_text(w-320, h-95, "FREE CAM:", 0.8, 0.8, 0.8)
+            self._draw_text(w-320, h-111, "W/S : Maju/Mundur", 0.6, 0.6, 0.6)
+            self._draw_text(w-320, h-127, "A/D : Geser Kiri/Kanan", 0.6, 0.6, 0.6)
+            self._draw_text(w-320, h-143, "Q/E : Naik/Turun", 0.6, 0.6, 0.6)
+            self._draw_text(w-320, h-159, "Mouse: Menoleh", 0.6, 0.6, 0.6)
+        else:
+            self._draw_text(w-320, h-95, "ORBIT CAM:", 0.8, 0.8, 0.8)
+            self._draw_text(w-320, h-111, "W/S : Zoom In/Out", 0.6, 0.6, 0.6)
+            self._draw_text(w-320, h-127, "A/D : Putar Kiri/Kanan", 0.6, 0.6, 0.6)
+            self._draw_text(w-320, h-143, "R   : Reset Kamera", 0.6, 0.6, 0.6)
 
         glEnable(GL_DEPTH_TEST)
         glMatrixMode(GL_PROJECTION); glPopMatrix()
