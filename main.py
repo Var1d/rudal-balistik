@@ -24,8 +24,9 @@
   Kontrol:
     ENTER       – Mulai / Ulang simulasi
     1/2/3/4     – Ganti mode kamera
-    W/S         – Zoom in/out
-    A/D         – Putar kamera
+    W/A/S/D     – Pergerakan kamera (Maju, Kiri, Mundur, Kanan)
+    Panah       – Kontrol menoleh (Atas, Bawah, Kiri, Kanan)
+    Mouse       – Lihat sekitar saat free-cam
     R           – Reset kamera
     ESC         – Keluar
 ============================================================
@@ -36,9 +37,14 @@
 
 import sys
 import math
+import time
 from OpenGL.GL   import *
 from OpenGL.GLU  import *
 from OpenGL.GLUT import *
+
+# State input untuk free cam
+freecam_last_mouse = [None]
+last_idle_time = [time.perf_counter()]
 
 # ── Import modul internal ────────────────────────────────
 from camera          import Camera, CAM_FREE, CAM_CHASE, CAM_TARGET, CAM_ORBIT
@@ -131,6 +137,7 @@ def get_dt():
 def reset_sim():
     global state, sim_t, launch_t, explode_t, t_flight
     global missile_x, missile_y, frame_cnt
+    keep_idle_free_cam = state == IDLE and camera.mode == CAM_FREE
     state      = LAUNCHING
     sim_t      = 0.0
     launch_t   = 0.0
@@ -140,7 +147,8 @@ def reset_sim():
     missile_y  = 0.05
     frame_cnt  = 0
     particles.reset()
-    camera.reset()
+    if not keep_idle_free_cam:
+        camera.reset()
     camera.trigger_shake(0.10)
     if renderer is not None:
         renderer.reset_effects()
@@ -157,6 +165,12 @@ def on_timer(value):
 
     if state == LAUNCHING:
         launch_t += dt_eff
+        if camera.mode == CAM_FREE:
+            camera.update(
+                dt_eff, state, missile_x, missile_y,
+                0.0, 0.0, max_range() * SCALE,
+                IDLE, FLYING, EXPLODING, FINISHED
+            )
         if launch_t >= 0.3:
             state = FLYING
             sim_t = 0.0
@@ -268,6 +282,22 @@ def display():
 
     glutSwapBuffers()
 
+
+def idle_update():
+    now = time.perf_counter()
+    dt = min(0.05, now - last_idle_time[0])
+    last_idle_time[0] = now
+
+    # Saat simulasi belum berjalan / sudah selesai, timer fisika tidak aktif.
+    # Free-cam tetap perlu update supaya mouse dan WASD terasa langsung.
+    if camera.mode == CAM_FREE and state in (IDLE, FINISHED):
+        camera.update(
+            dt, state, missile_x, missile_y,
+            0.0, 0.0, max_range() * SCALE,
+            IDLE, FLYING, EXPLODING, FINISHED
+        )
+        glutPostRedisplay()
+
 # ────────────────────────────────────────────────────────
 #  Reshape
 # ────────────────────────────────────────────────────────
@@ -279,23 +309,62 @@ def reshape(w, h):
 # ────────────────────────────────────────────────────────
 def keyboard(key, x, y):
     global cam_dist, cam_angle
+    # WASD untuk free cam
+    if camera.mode == CAM_FREE:
+        camera.free_cam_key(key, True)
 
     if key in (b'\r', b'\n'):
         if state in (IDLE, FINISHED):
             reset_sim()
     elif key == b'\x1b':
         sys.exit(0)
-    elif key in (b'w', b'W'): camera.zoom_in()
-    elif key in (b's', b'S'): camera.zoom_out()
-    elif key in (b'a', b'A'): camera.rotate_left()
-    elif key in (b'd', b'D'): camera.rotate_right()
     elif key in (b'r', b'R'): camera.reset()
-    elif key == b'1': camera.set_mode(CAM_FREE)
+    elif key == b'1':
+        camera.set_mode(CAM_FREE)
+        freecam_last_mouse[0] = None
     elif key == b'2': camera.set_mode(CAM_CHASE)
     elif key == b'3': camera.set_mode(CAM_TARGET)
     elif key == b'4': camera.set_mode(CAM_ORBIT)
+    # Zoom/rotate hanya jika bukan free cam
+    elif camera.mode != CAM_FREE:
+        if key in (b'w', b'W'): camera.zoom_in()
+        if key in (b's', b'S'): camera.zoom_out()
+        if key in (b'a', b'A'): camera.rotate_left()
+        if key in (b'd', b'D'): camera.rotate_right()
 
     glutPostRedisplay()
+
+def keyboard_up(key, x, y):
+    if camera.mode == CAM_FREE:
+        camera.free_cam_key(key, False)
+
+def special_key(key, x, y):
+    if camera.mode == CAM_FREE:
+        if key == GLUT_KEY_UP:    camera.free_cam_key('up', True)
+        if key == GLUT_KEY_DOWN:  camera.free_cam_key('down', True)
+        if key == GLUT_KEY_LEFT:  camera.free_cam_key('left', True)
+        if key == GLUT_KEY_RIGHT: camera.free_cam_key('right', True)
+    glutPostRedisplay()
+
+def special_key_up(key, x, y):
+    if camera.mode == CAM_FREE:
+        if key == GLUT_KEY_UP:    camera.free_cam_key('up', False)
+        if key == GLUT_KEY_DOWN:  camera.free_cam_key('down', False)
+        if key == GLUT_KEY_LEFT:  camera.free_cam_key('left', False)
+        if key == GLUT_KEY_RIGHT: camera.free_cam_key('right', False)
+
+def mouse_motion(x, y):
+    # Mouse movement untuk free cam
+    if camera.mode == CAM_FREE:
+        if freecam_last_mouse[0] is not None:
+            dx = x - freecam_last_mouse[0][0]
+            dy = y - freecam_last_mouse[0][1]
+            camera.free_cam_mouse(dx, dy)
+        freecam_last_mouse[0] = (x, y)
+        glutPostRedisplay()
+
+def mouse_passive(x, y):
+    mouse_motion(x, y)
 
 # ────────────────────────────────────────────────────────
 #  Main
@@ -312,7 +381,9 @@ def main():
     print(f"  Waktu     : {flight_time():.2f} detik")
     print("-" * 56)
     print("  ENTER=Mulai  ESC=Keluar  1/2/3/4=Kamera")
-    print("  W/S=Zoom     A/D=Putar   R=Reset kamera")
+    print("  FREE: W/S=Maju/Mundur  A/D=Geser Kiri/Kanan")
+    print("  PANAH: Atas/Bawah=Tengadah/Tunduk  Kiri/Kanan=Menoleh")
+    print("  Mode lain: W/S=Zoom  A/D=Putar  R=Reset kamera")
     print("=" * 56)
 
     glutInit(sys.argv)
@@ -335,6 +406,12 @@ def main():
     glutDisplayFunc(display)
     glutReshapeFunc(reshape)
     glutKeyboardFunc(keyboard)
+    glutKeyboardUpFunc(keyboard_up)
+    glutSpecialFunc(special_key)
+    glutSpecialUpFunc(special_key_up)
+    glutMotionFunc(mouse_motion)
+    glutPassiveMotionFunc(mouse_passive)
+    glutIdleFunc(idle_update)
     glutMainLoop()
 
 if __name__ == "__main__":

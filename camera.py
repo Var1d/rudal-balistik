@@ -34,6 +34,10 @@ def _lerp(a, b, t):
     return a + (b - a) * t
 
 
+def _smooth_factor(speed, dt):
+    return 1.0 - math.exp(-speed * max(0.0, dt))
+
+
 class Camera:
     """Kamera OpenGL dengan 4 mode dan transisi halus (lerp)."""
 
@@ -57,6 +61,110 @@ class Camera:
         self.shake_y = 0.0
         self.shake_z = 0.0
 
+        # Free cam (WASD + mouse)
+        self.free_pos = [0.0, 7.0, 14.0]
+        self.free_yaw = 0.0
+        self.free_pitch = 0.0
+        self._free_target_yaw = 0.0
+        self._free_target_pitch = 0.0
+        self.free_vel = [0.0, 0.0, 0.0]
+        
+        # Kecepatan ditingkatkan sesuai permintaan
+        self.free_speed = 35.0
+        self.free_rot_speed = 180.0
+        self.free_accel = 20.0
+        self.free_damping = 12.0
+        
+        self.free_mouse_sens = 0.14
+        self.free_mouse_smooth = 18.0
+        self._free_last_mouse = None
+        self._free_move = {
+            'w': False, 's': False, 'a': False, 'd': False,
+            'up': False, 'down': False, 'left': False, 'right': False
+        }
+
+    def free_cam_key(self, key, down):
+        if isinstance(key, bytes):
+            k = key.decode('utf-8').lower()
+        elif isinstance(key, str):
+            k = key.lower()
+        else:
+            k = key
+            
+        if k in self._free_move:
+            self._free_move[k] = down
+
+    def free_cam_mouse(self, dx, dy):
+        self._free_target_yaw += dx * self.free_mouse_sens
+        self._free_target_pitch -= dy * self.free_mouse_sens
+        self._free_target_pitch = max(-89.0, min(89.0, self._free_target_pitch))
+
+    def update_free_cam(self, dt):
+        dir_x = dir_y = dir_z = 0.0
+        
+        # Pergerakan WASD
+        if self._free_move['w']: dir_z += 1.0  # Maju
+        if self._free_move['s']: dir_z -= 1.0  # Mundur
+        if self._free_move['a']: dir_x -= 1.0  # Kiri
+        if self._free_move['d']: dir_x += 1.0  # Kanan
+        
+        # Rotasi Panah (Menoleh)
+        if self._free_move['left']:  self._free_target_yaw -= self.free_rot_speed * dt
+        if self._free_move['right']: self._free_target_yaw += self.free_rot_speed * dt
+        if self._free_move['up']:    self._free_target_pitch += self.free_rot_speed * dt
+        if self._free_move['down']:  self._free_target_pitch -= self.free_rot_speed * dt
+        
+        # Batasi pitch agar tidak jungkir balik
+        self._free_target_pitch = max(-89.0, min(89.0, self._free_target_pitch))
+
+        move_len = math.sqrt(dir_x * dir_x + dir_y * dir_y + dir_z * dir_z)
+        if move_len > 0.01:
+            dir_x /= move_len
+            dir_y /= move_len
+            dir_z /= move_len
+
+        mouse_t = _smooth_factor(self.free_mouse_smooth, dt)
+        self.free_yaw = _lerp(self.free_yaw, self._free_target_yaw, mouse_t)
+        self.free_pitch = _lerp(self.free_pitch, self._free_target_pitch, mouse_t)
+
+        yaw_rad = math.radians(self.free_yaw)
+        pitch_rad = math.radians(self.free_pitch)
+
+        forward = [
+            math.cos(pitch_rad) * math.sin(yaw_rad),
+            math.sin(pitch_rad),
+            -math.cos(pitch_rad) * math.cos(yaw_rad)
+        ]
+        right = [
+            math.cos(yaw_rad),
+            0.0,
+            math.sin(yaw_rad)
+        ]
+
+        target_vel = [
+            (forward[0] * dir_z + right[0] * dir_x) * self.free_speed,
+            dir_y * self.free_speed,
+            (forward[2] * dir_z + right[2] * dir_x) * self.free_speed,
+        ]
+
+        response = self.free_accel if move_len > 0.01 else self.free_damping
+        vel_t = _smooth_factor(response, dt)
+        for i in range(3):
+            self.free_vel[i] = _lerp(self.free_vel[i], target_vel[i], vel_t)
+            self.free_pos[i] += self.free_vel[i] * dt
+
+        target_eye = list(self.free_pos)
+        target_look = [
+            self.free_pos[0] + forward[0],
+            self.free_pos[1] + forward[1],
+            self.free_pos[2] + forward[2],
+        ]
+
+        cam_t = _smooth_factor(self._lerp_speed, dt)
+        for i in range(3):
+            self.eye[i] = _lerp(self.eye[i], target_eye[i], cam_t)
+            self.look[i] = _lerp(self.look[i], target_look[i], cam_t)
+
     # ── Mode ──────────────────────────────────────────────
     def set_mode(self, mode):
         self.mode = mode
@@ -69,6 +177,18 @@ class Camera:
         self._orbit_ang = 30.0
         self.shake_amp  = 0.0
         self.shake_x = self.shake_y = self.shake_z = 0.0
+        self.eye  = [0.0, 7.0, 14.0]
+        self.look = [0.0, 0.8,  0.0]
+        self._t_eye  = [0.0, 7.0, 14.0]
+        self._t_look = [0.0, 0.8,  0.0]
+        self.free_pos = [0.0, 7.0, 14.0]
+        self.free_yaw = 0.0
+        self.free_pitch = 0.0
+        self._free_target_yaw = 0.0
+        self._free_target_pitch = 0.0
+        self.free_vel = [0.0, 0.0, 0.0]
+        for key in self._free_move:
+            self._free_move[key] = False
 
     def trigger_shake(self, amplitude):
         self.shake_amp = max(self.shake_amp, amplitude)
@@ -85,12 +205,10 @@ class Camera:
         """Hitung posisi target kamera, lalu lerp ke sana."""
 
         if self.mode == CAM_FREE:
-            rad    = math.radians(self.angle)
-            cx     = target_x * 0.5
-            self._t_eye  = [cx + self.dist * math.sin(rad),
-                             self.dist * 0.5,
-                             self.dist * math.cos(rad)]
-            self._t_look = [cx, 0.8, 0.0]
+            self.update_free_cam(dt)
+            # Smooth shake tetap berlaku
+            self._t_eye = list(self.eye)
+            self._t_look = list(self.look)
 
         elif self.mode == CAM_CHASE and state_sim == FLYING:
             spd = math.hypot(mvx, mvy)
