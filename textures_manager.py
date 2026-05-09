@@ -20,6 +20,7 @@ class TextureManager:
         self.leaves    = None
         self.concrete  = None
         self.missile_t = None
+        self.moon      = None
 
     def load_all(self):
         base = os.path.join(os.path.dirname(__file__), "textures")
@@ -31,6 +32,7 @@ class TextureManager:
             "leaves":    "leaves.png",
             "concrete":  "concrete.png",
             "missile_t": "missile.png",
+            "moon":      "moon.png",
         }
         for attr, fname in mapping.items():
             path = os.path.join(base, fname)

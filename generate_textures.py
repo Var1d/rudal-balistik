@@ -203,6 +203,36 @@ def gen_missile():
 
 
 # ──────────────────────────────────────────────────────────
+#  8. MOON – tekstur bulan berlubang (crater)
+# ──────────────────────────────────────────────────────────
+def gen_moon():
+    img = Image.new("RGBA", (SIZE, SIZE))
+    pix = img.load()
+    rng = random.Random(8)
+    for y in range(SIZE):
+        for x in range(SIZE):
+            # Warna dasar abu-abu keputihan
+            v = int(215 + rng.uniform(-15, 15))
+            pix[x, y] = (v, v, v - 10, 255)
+    
+    draw = ImageDraw.Draw(img)
+    # Tambahkan kawah-kawah (craters)
+    for _ in range(45):
+        cx = rng.randint(0, SIZE)
+        cy = rng.randint(0, SIZE)
+        r  = rng.randint(3, 22)
+        # Warna kawah sedikit lebih gelap
+        v  = rng.randint(150, 195)
+        # Gambar bayangan kawah sederhana
+        draw.ellipse([cx-r, cy-r, cx+r, cy+r], fill=(v, v, v, 255))
+        # Tambahkan sedikit highlight di pinggiran kawah
+        draw.arc([cx-r, cy-r, cx+r, cy+r], 45, 225, fill=(v+20, v+20, v+20, 255))
+    
+    img = img.filter(ImageFilter.GaussianBlur(1.5))
+    save(img, "moon.png")
+
+
+# ──────────────────────────────────────────────────────────
 #  MAIN
 # ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
@@ -218,8 +248,9 @@ if __name__ == "__main__":
     gen_leaves()
     gen_concrete()
     gen_missile()
+    gen_moon()
 
     print("=" * 50)
-    print(f"  Selesai! 7 tekstur disimpan di: {OUT_DIR}")
+    print(f"  Selesai! 8 tekstur disimpan di: {OUT_DIR}")
     print("  Sekarang jalankan: python main.py")
     print("=" * 50)
