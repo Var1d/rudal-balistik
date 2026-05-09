@@ -38,6 +38,7 @@
 import sys
 import math
 import time
+import ctypes
 from OpenGL.GL   import *
 from OpenGL.GLU  import *
 from OpenGL.GLUT import *
@@ -303,6 +304,15 @@ def idle_update():
     dt = min(0.05, now - last_idle_time[0])
     last_idle_time[0] = now
 
+    # Check Shift for free cam (standalone shift detection on Windows)
+    if camera.mode == CAM_FREE:
+        try:
+            # 0x10 is the Virtual Key Code for SHIFT
+            is_shift = bool(ctypes.windll.user32.GetAsyncKeyState(0x10) & 0x8000)
+            camera._free_move['shift'] = is_shift
+        except:
+            pass
+
     # Saat simulasi belum berjalan / sudah selesai, timer fisika tidak aktif.
     # Free-cam tetap perlu update supaya mouse dan WASD terasa langsung.
     if camera.mode == CAM_FREE and state in (IDLE, FINISHED):
@@ -420,7 +430,7 @@ def main():
     print("-" * 56)
     print("  ENTER=Mulai  ESC=Keluar  1/2/3/4=Kamera")
     print("  FREE: W/S=Maju/Mundur  A/D=Geser Kiri/Kanan")
-    print("        Q/E=Naik/Turun")
+    print("        SPACE/SHIFT=Naik/Turun")
     print("  PANAH: Atas/Bawah=Tengadah/Tunduk  Kiri/Kanan=Menoleh")
     print("  Mode lain: W/S=Zoom  A/D=Putar  R=Reset kamera")
     print("=" * 56)
