@@ -87,6 +87,31 @@ class ParticleSystem:
                 Particle(x, y, vx, vy, life, sz, r,g,b,
                          gravity=0.4, is_smoke=True))
 
+    def emit_launch_smoke(self, x, y, dt):
+        """Asap tebal di tanah saat rudal bersiap meluncur."""
+        self._stimer += dt
+        if self._stimer < 0.015: return
+        self._stimer = 0.0
+        if len(self.smoke) >= self.MAX_SMOKE + 200: return
+
+        for _ in range(12):
+            # Menyebar horizontal di tanah
+            vx   = random.uniform(-1.8, 1.2)
+            vz   = random.uniform(-1.0, 1.0) # Meskipun Particle hanya x,y, kita bisa simulasikan
+            vy   = random.uniform(0.05, 0.5)
+            life = random.uniform(0.8, 1.8)
+            sz   = random.uniform(0.08, 0.18)
+            
+            # Warna abu-abu kecoklatan (asap tanah)
+            c = random.uniform(0.3, 0.6)
+            r, g, b = c, c*0.95, c*0.85
+            
+            # Kita gunakan Particle yang ada, tapi karena ini ground smoke, 
+            # gravitasi negatif sedikit supaya asapnya naik perlahan.
+            p = Particle(x + random.uniform(-0.1, 0.1), y, vx, vy, life, sz, r, g, b, 
+                         gravity=-0.15, is_smoke=True)
+            self.smoke.append(p)
+
     # ── Ledakan besar ──────────────────────────────────────
     def trigger_explosion(self, x, y):
         self.expl.clear()

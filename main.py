@@ -179,6 +179,9 @@ def on_timer(value):
 
     if state == LAUNCHING:
         launch_t += dt_eff
+        # Tambahkan asap di tanah saat persiapan meluncur
+        particles.emit_launch_smoke(missile_x, 0.05, dt_eff)
+        
         if camera.mode == CAM_FREE:
             camera.update(
                 dt_eff, state, missile_x, missile_y,
