@@ -90,8 +90,8 @@ python main.py
 | **2** | Mode kamera: CHASE (ikuti rudal) |
 | **3** | Mode kamera: TARGET (hadap bunker) |
 | **4** | Mode kamera: ORBIT (otomatis) |
-| **W / S** | Zoom in / out |
-| **A / D** | Putar kamera kiri / kanan |
+| **W / S** | Maju / Mundur |
+| **A / D** | Kiri / Kanan |
 | **R** | Reset posisi kamera |
 | **ESC** | Keluar |
 
