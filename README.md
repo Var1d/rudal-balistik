@@ -6,13 +6,13 @@
 
 ## Anggota
 
-| Nama | NIM | Tanggung Jawab |
-|------|-----|----------------|
-| Jamal Abdul Nasir | 247006111015 | |
-| Fiqri Mochamad Fadillah | 247006111051 | |
-| Faisal Hadi Saik | 247006111052 | |
-| Irsyad Khoerul Umam | 247006111055 | |
-| Farid Dhiya Fairuz | 247006111058 | Camera |
+| Nama | NIM | 
+|------|-----|
+| Jamal Abdul Nasir | 247006111015 | 
+| Fiqri Mochamad Fadillah | 247006111051 |
+| Faisal Hadi Saik | 247006111052 |
+| Irsyad Khoerul Umam | 247006111055 |
+| Farid Dhiya Fairuz | 247006111058 | 
 
 ---
 
