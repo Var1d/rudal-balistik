@@ -209,8 +209,7 @@ def get_dt():
 def reset_sim():
     global state, sim_t, launch_t, explode_t, t_flight
     global missile_x, missile_y, frame_cnt
-    # Simpan posisi FREE cam sebelum reset
-    was_free_cam = camera.mode == CAM_FREE
+    # Simpan mode kamera saat ini, jangan reset
     state      = LAUNCHING
     sim_t      = 0.0
     launch_t   = 0.0
@@ -220,9 +219,7 @@ def reset_sim():
     missile_y  = 0.05
     frame_cnt  = 0
     particles.reset()
-    # Jangan reset kamera jika sedang di FREE mode
-    if not was_free_cam:
-        camera.reset()
+    # Jangan reset kamera sama sekali, biarkan mode dan posisi tetap
     camera.trigger_shake(0.10)
     if renderer is not None:
         renderer.reset_effects()
@@ -424,6 +421,8 @@ def idle_update():
                 renderer._fade_alpha = 0.0
                 renderer._fading     = False
                 state = IDLE
+                # Set kamera default ke FREE saat pertama masuk simulasi
+                camera.set_mode(CAM_FREE)
                 unlock_mouse()
 
         glutPostRedisplay()
@@ -472,10 +471,24 @@ def keyboard(key, x, y):
         if state in (IDLE, FINISHED):
             reset_sim()
     elif key == b'\x1b':
+        # ESC: Unlock mouse di FREE cam, atau keluar
         if mouse_locked[0]:
             unlock_mouse()
-        else:
-            sys.exit(0)
+        elif state == IDLE or state == FINISHED:
+            # Hanya bisa kembali ke menu saat IDLE atau FINISHED
+            state = LANDING
+            renderer._type_done = False
+            renderer._type_index = 0
+            renderer._countdown = False
+            renderer._fading = False
+            unlock_mouse()
+    elif key == b'\x7f':  # DELETE key
+        # DELETE: Stop simulasi dan kembali ke IDLE
+        if state in (LAUNCHING, FLYING, EXPLODING):
+            state = IDLE
+            particles.reset()
+            if renderer is not None:
+                renderer.reset_effects()
     elif key in (b'r', b'R'): camera.reset()
     elif key == b'1':
         camera.set_mode(CAM_FREE)

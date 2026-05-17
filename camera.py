@@ -193,21 +193,24 @@ class Camera:
             self._t_look = list(self.look)
 
     def reset(self):
-        # Reset semua mode KECUALI posisi DAN arah pandang FREE cam
+        # Reset hanya untuk tombol R, tidak dipanggil saat mulai simulasi
+        # Simpan mode kamera saat ini
+        old_mode = self.mode
         old_free_pos = list(self.free_pos)
         old_free_yaw = self.free_yaw
         old_free_pitch = self.free_pitch
         old_free_target_yaw = self._free_target_yaw
         old_free_target_pitch = self._free_target_pitch
         
-        self.mode       = CAM_FREE
+        # Reset parameter kamera lain
         self.dist       = 14.0
         self.angle      = 30.0
         self._orbit_ang = 30.0
         self.shake_amp  = 0.0
         self.shake_x = self.shake_y = self.shake_z = 0.0
         
-        # Kembalikan posisi DAN arah pandang FREE cam
+        # Kembalikan mode dan posisi FREE cam
+        self.mode = old_mode
         self.free_pos = old_free_pos
         self.free_yaw = old_free_yaw
         self.free_pitch = old_free_pitch

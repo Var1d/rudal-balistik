@@ -447,6 +447,10 @@ class SceneRenderer:
             py = max(0.0, v0*math.sin(angle_rad_fn())*sim_t - 0.5*gravity*sim_t*sim_t)
             self._draw_text(10, 24, f"Waktu : {sim_t:.2f} s / {t_flight:.2f} s"); self._draw_text(10, 6, f"Posisi : X={v0*math.cos(angle_rad_fn())*sim_t:.1f} m  Y={py:.1f} m")
         self._draw_text(w-320, h-22, "KONTROL DASAR:", 0.8, 0.8, 0.8); self._draw_text(w-320, h-38, "1/2/3/4 : Ganti Kamera", 0.6, 0.6, 0.6); self._draw_text(w-320, h-54, "ENTER   : Mulai/Ulang", 0.6, 0.6, 0.6)
+        if state in (IDLE, FINISHED):
+            self._draw_text(w-320, h-70, "ESC     : Kembali ke Menu", 0.6, 0.6, 0.6)
+        else:
+            self._draw_text(w-320, h-70, "DELETE  : Stop Simulasi", 0.6, 0.6, 0.6)
         if cam_mode == CAM_FREE:
             self._draw_text(w-320, h-95, "FREE CAM:", 0.8, 0.8, 0.8); self._draw_text(w-320, h-111, "W/S : Maju/Mundur", 0.6, 0.6, 0.6)
             self._draw_text(w-320, h-127, "A/D : Geser Kiri/Kanan", 0.6, 0.6, 0.6); self._draw_text(w-320, h-143, "SPACE/SHIFT : Naik/Turun", 0.6, 0.6, 0.6)
