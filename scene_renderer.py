@@ -46,6 +46,18 @@ class SceneRenderer:
         self.terrain_w       = 260.0
         self.terrain_d       = 140.0
         self.terrain_list_id = None
+        # Landing page state
+        self._fading         = False
+        self._fade_alpha     = 0.0
+        # Typewriter effect
+        self._type_index     = 0
+        self._type_timer     = 0.0
+        self._type_speed     = 0.045
+        self._type_done      = False
+        # Countdown state
+        self._countdown      = False
+        self._countdown_val  = 3.0
+        self._cdown_flash    = 0.0
 
     # ── Inisialisasi setelah OpenGL context siap ──────────
     def init(self):
@@ -438,9 +450,292 @@ class SceneRenderer:
         if cam_mode == CAM_FREE:
             self._draw_text(w-320, h-95, "FREE CAM:", 0.8, 0.8, 0.8); self._draw_text(w-320, h-111, "W/S : Maju/Mundur", 0.6, 0.6, 0.6)
             self._draw_text(w-320, h-127, "A/D : Geser Kiri/Kanan", 0.6, 0.6, 0.6); self._draw_text(w-320, h-143, "SPACE/SHIFT : Naik/Turun", 0.6, 0.6, 0.6)
+        elif cam_mode == 3:  # CAM_ORBIT
+            self._draw_text(w-320, h-95, "ORBIT CAM:", 0.8, 0.8, 0.8); self._draw_text(w-320, h-111, "W/S : Zoom In/Out", 0.6, 0.6, 0.6)
+            self._draw_text(w-320, h-127, "A/D : Putar Kiri/Kanan", 0.6, 0.6, 0.6); self._draw_text(w-320, h-143, "R   : Reset Kamera", 0.6, 0.6, 0.6)
         glEnable(GL_DEPTH_TEST); glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(GL_MODELVIEW); glPopMatrix()
 
     def _draw_axes(self):
         glDisable(GL_LIGHTING); glLineWidth(2.0); glBegin(GL_LINES)
         glColor3f(1,0,0); glVertex3f(0,0,0); glVertex3f(2,0,0); glColor3f(0,1,0); glVertex3f(0,0,0); glVertex3f(0,2,0); glColor3f(0,0,1); glVertex3f(0,0,0); glVertex3f(0,0,2)
         glEnd(); glLineWidth(1.0); glEnable(GL_LIGHTING)
+
+    # ── Landing Page ───────────────────────────────────────
+    def render_landing(self):
+        w = glutGet(GLUT_WINDOW_WIDTH)
+        h = glutGet(GLUT_WINDOW_HEIGHT)
+
+        # Setup proyeksi 3D untuk background
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        gluPerspective(45.0, w / max(h, 1), 0.01, 300.0)
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+        gluLookAt(0.0, 7.0, 14.0,  0.0, 0.8, 0.0,  0.0, 1.0, 0.0)
+
+        # Lapis 1 & 2: langit + terrain
+        self._draw_sky()
+        self._draw_terrain()
+
+        # Lapis 3: launcher + pohon di background
+        glEnable(GL_LIGHTING)
+        self.launcher_obj.draw(60.0, self.tex)
+        if self.shader_default and self.shader_default.valid:
+            self.shader_default.use()
+            self._apply_common_shader_uniforms(self.shader_default)
+            self.shader_default.set_uniform_i("useTexture", 1)
+        for tree in self.trees:
+            tree.draw(self.tex)
+        ShaderProgram.use_fixed()
+
+        # Lapis 4: overlay 2D
+        glDisable(GL_LIGHTING)
+        glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity()
+        gluOrtho2D(0, w, 0, h)
+        glMatrixMode(GL_MODELVIEW); glPushMatrix(); glLoadIdentity()
+        glDisable(GL_DEPTH_TEST)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+        self._draw_scanline(w, h)
+
+        if self._countdown:
+            self._draw_countdown(w, h)
+        else:
+            self._draw_landing_overlay(w, h)
+
+        # Fade-out overlay hitam
+        if self._fading:
+            glBegin(GL_QUADS)
+            glColor4f(0.0, 0.0, 0.0, min(1.0, self._fade_alpha))
+            glVertex2f(0, 0); glVertex2f(w, 0)
+            glVertex2f(w, h); glVertex2f(0, h)
+            glEnd()
+
+        glEnable(GL_DEPTH_TEST)
+        glMatrixMode(GL_PROJECTION); glPopMatrix()
+        glMatrixMode(GL_MODELVIEW);  glPopMatrix()
+        glEnable(GL_LIGHTING)
+
+    def _draw_countdown(self, w, h):
+        """Tampilkan angka countdown besar di tengah layar."""
+        val  = self._countdown_val
+        num  = int(math.ceil(max(val, 0.0)))
+        frac = val - int(val) if val > 0 else 1.0
+        alpha = min(1.0, frac * 2.0)
+        cx, cy = w // 2, h // 2
+
+        # Overlay gelap
+        glBegin(GL_QUADS)
+        glColor4f(0.0, 0.0, 0.0, 0.60)
+        glVertex2f(0, 0); glVertex2f(w, 0)
+        glVertex2f(w, h); glVertex2f(0, h)
+        glEnd()
+
+        if val > 0.0:
+            label = str(num)
+            tx = cx - len(label) * 9
+            glColor4f(0.30, 0.95, 0.22, alpha)
+            glRasterPos2f(tx, cy)
+            for ch in label:
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(ch))
+            sub_map = {3: "BERSIAP...", 2: "SIAP!", 1: "API !!!"}
+            sub = sub_map.get(num, "")
+            glColor4f(0.65, 0.85, 0.55, alpha * 0.85)
+            glRasterPos2f(cx - len(sub) * 4, cy - 28)
+            for ch in sub:
+                glutBitmapCharacter(GLUT_BITMAP_8_BY_13, ord(ch))
+        else:
+            launch = ">> LUNCURKAN <<"
+            blink  = 0.6 + 0.4 * math.sin(self._star_time * 12.0)
+            glColor4f(0.95*blink, 0.30*blink, 0.10*blink, 1.0)
+            glRasterPos2f(cx - len(launch) * 5, cy)
+            for ch in launch:
+                glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(ch))
+
+    def _draw_scanline(self, w, h):
+        """Strip hijau transparan bergerak dari atas ke bawah."""
+        t = self._star_time
+        sy = h * (1.0 - (t * 0.12) % 1.0)
+        glBegin(GL_QUADS)
+        glColor4f(0.20, 0.65, 0.15, 0.0)
+        glVertex2f(0, sy);      glVertex2f(w, sy)
+        glColor4f(0.20, 0.65, 0.15, 0.06)
+        glVertex2f(w, sy - 40); glVertex2f(0, sy - 40)
+        glEnd()
+
+    def _draw_landing_box(self, x, y, bw, bh, r, g, b, a=0.75, border=True):
+        """Kotak semi-transparan dengan border hijau militer opsional."""
+        glBegin(GL_QUADS)
+        glColor4f(r, g, b, a)
+        glVertex2f(x,      y);      glVertex2f(x + bw, y)
+        glVertex2f(x + bw, y + bh); glVertex2f(x,      y + bh)
+        glEnd()
+        if border:
+            glLineWidth(1.4)
+            glBegin(GL_LINE_LOOP)
+            glColor4f(0.35, 0.70, 0.22, 0.88)
+            glVertex2f(x,      y);      glVertex2f(x + bw, y)
+            glVertex2f(x + bw, y + bh); glVertex2f(x,      y + bh)
+            glEnd()
+            glLineWidth(1.0)
+
+    def _draw_hline(self, x, y, length, r=0.30, g=0.58, b=0.18, a=0.70):
+        glLineWidth(1.2)
+        glBegin(GL_LINES)
+        glColor4f(r, g, b, a)
+        glVertex2f(x, y); glVertex2f(x + length, y)
+        glEnd()
+        glLineWidth(1.0)
+
+    def _ltext(self, x, y, text, r=1.0, g=1.0, b=1.0, a=1.0,
+               font=GLUT_BITMAP_8_BY_13):
+        glColor4f(r, g, b, a)
+        glRasterPos2f(x, y)
+        for ch in text:
+            glutBitmapCharacter(font, ord(ch))
+
+    def _draw_landing_overlay(self, w, h):
+        t = self._star_time
+
+        # Dimensi panel utama
+        panel_w = min(920, w - 60)
+        panel_h = min(540, h - 60)
+        px = (w - panel_w) // 2
+        py = (h - panel_h) // 2
+
+        # ── Panel utama ────────────────────────────────────
+        self._draw_landing_box(px, py, panel_w, panel_h,
+                               0.01, 0.05, 0.01, 0.80)
+
+        # ── Corner brackets ────────────────────────────────
+        L = 20
+        glLineWidth(2.2)
+        glColor4f(0.38, 0.82, 0.22, 1.0)
+        for (cx, cy, sx, sy) in [
+            (px,          py,          1,  1),
+            (px+panel_w,  py,         -1,  1),
+            (px,          py+panel_h,  1, -1),
+            (px+panel_w,  py+panel_h, -1, -1),
+        ]:
+            glBegin(GL_LINES)
+            glVertex2f(cx, cy); glVertex2f(cx + sx*L, cy)
+            glVertex2f(cx, cy); glVertex2f(cx, cy + sy*L)
+            glEnd()
+        glLineWidth(1.0)
+
+        # ── Header bar ─────────────────────────────────────
+        hbar_y = py + panel_h - 62
+        self._draw_landing_box(px+8, hbar_y, panel_w-16, 54,
+                               0.04, 0.16, 0.04, 0.92, border=False)
+        self._draw_hline(px+8, hbar_y,      panel_w-16)
+        self._draw_hline(px+8, hbar_y + 54, panel_w-16)
+
+        # Judul — typewriter effect
+        TITLE_FULL = "SIMULASI PELUNCURAN RUDAL BALISTIK 3D"
+        if self._type_done:
+            pulse   = 0.85 + 0.15 * math.sin(t * 2.0)
+            display = TITLE_FULL
+            tr, tg, tb = 0.28*pulse, 0.92*pulse, 0.22*pulse
+        else:
+            display = TITLE_FULL[:self._type_index]
+            tr, tg, tb = 0.28, 0.92, 0.22
+        cursor  = "_" if (not self._type_done and int(t * 8) % 2 == 0) else ""
+        title_x = px + (panel_w - len(TITLE_FULL) * 10) // 2
+        self._ltext(title_x, hbar_y + 32, display + cursor,
+                    tr, tg, tb, font=GLUT_BITMAP_HELVETICA_18)
+
+        sub   = "Grafika Komputer  |  UNSIL 2026  |  Kelompok 58"
+        sub_x = px + (panel_w - len(sub) * 7) // 2
+        self._ltext(sub_x, hbar_y + 12, sub,
+                    0.50, 0.72, 0.40, font=GLUT_BITMAP_8_BY_13)
+
+        # ── Divider ────────────────────────────────────────
+        div1_y = hbar_y - 16
+        self._draw_hline(px+8, div1_y, panel_w-16)
+
+        # ── Tabel Anggota ──────────────────────────────────
+        tbl_top = div1_y - 14
+        tbl_x   = px + 32
+        col_nim = tbl_x + 270
+
+        # Header kolom
+        self._draw_landing_box(tbl_x-8, tbl_top-2, panel_w-56, 15,
+                               0.06, 0.20, 0.05, 0.88, border=False)
+        self._ltext(tbl_x,       tbl_top, "NAMA",             0.42, 0.82, 0.28, font=GLUT_BITMAP_8_BY_13)
+        self._ltext(col_nim,     tbl_top, "NIM",              0.42, 0.82, 0.28, font=GLUT_BITMAP_8_BY_13)
+        self._ltext(col_nim+115, tbl_top, "PANGKAT & JABATAN",0.42, 0.82, 0.28, font=GLUT_BITMAP_8_BY_13)
+        self._draw_hline(tbl_x-8, tbl_top-4, panel_w-56, 0.28, 0.55, 0.16)
+
+        members = [
+            ("Fiqri Mochamad Fadillah", "247006111051", "Marsekal Muda", "Komandan Operasi",      (0.95, 0.80, 0.20)),
+            ("Farid Dhiya Fairuz",      "247006111058", "Kolonel",       "Kepala Navigasi & Kamera",(0.80, 0.82, 0.85)),
+            ("Jamal Abdul Nasir",       "247006111015", "Mayor",         "Komandan Lapangan",      (0.40, 0.90, 0.40)),
+            ("Irsyad Khoerul Umam",     "247006111055", "Kapten",        "Komandan Medan & Terrain",(0.35, 0.75, 0.30)),
+            ("Faisal Hadi Saik",        "247006111052", "Letnan Satu",   "Operator Sistem Senjata", (0.28, 0.60, 0.25)),
+        ]
+        col_pangkat = col_nim + 115
+        row_h = 19
+        for i, (nama, nim, pangkat, jabatan, warna) in enumerate(members):
+            ry = tbl_top - 18 - i * row_h
+            if i % 2 == 0:
+                self._draw_landing_box(tbl_x-8, ry-3, panel_w-56, row_h-1,
+                                       0.05, 0.13, 0.03, 0.50, border=False)
+            # Bullet kotak kecil
+            glBegin(GL_QUADS)
+            glColor4f(*warna, 0.90)
+            glVertex2f(tbl_x-18, ry+2);  glVertex2f(tbl_x-10, ry+2)
+            glVertex2f(tbl_x-10, ry+10); glVertex2f(tbl_x-18, ry+10)
+            glEnd()
+            self._ltext(tbl_x,       ry, nama,                    0.82, 0.94, 0.72, font=GLUT_BITMAP_8_BY_13)
+            self._ltext(col_nim,     ry, nim,                     0.60, 0.78, 0.48, font=GLUT_BITMAP_8_BY_13)
+            self._ltext(col_pangkat, ry, f"{pangkat} - {jabatan}", *warna,           font=GLUT_BITMAP_8_BY_13)
+
+        # ── Divider tengah ─────────────────────────────────
+        div2_y = tbl_top - 18 - len(members) * row_h - 12
+        self._draw_hline(px+8, div2_y, panel_w-16)
+
+        # ── Kontrol keyboard ───────────────────────────────
+        # Setiap item: tombol di baris atas, deskripsi di baris bawah
+        ctrl_items = [
+            ("ENTER",   "Mulai/Ulang Simulasi"),
+            ("ESC",     "Unlock Mouse/Keluar"),
+            ("1/2/3/4", "Free/Chase/Target/Orbit"),
+            ("R",       "Reset Kamera"),
+            ("W/S",     "Maju/Mundur (Free)"),
+            ("A/D",     "Kiri/Kanan (Free)"),
+            ("SPACE/SHIFT", "Naik/Turun (Free)"),
+            ("Mouse",   "Lihat Sekitar (Free)"),
+            ("W/S",     "Zoom In/Out (Orbit)"),
+            ("A/D",     "Putar Kiri/Kanan (Orbit)"),
+            ("↑↓←→",    "Menoleh (Free)"),
+        ]
+        n_cols   = 4
+        col_w    = (panel_w - 32) // n_cols
+        row_h_ctrl = 34          # tinggi per item (tombol + deskripsi)
+        n_rows   = (len(ctrl_items) + n_cols - 1) // n_cols
+        box_h    = n_rows * row_h_ctrl + 16
+        ctrl_top = div2_y - 14  # Y atas kotak kontrol
+        self._draw_landing_box(px+8, ctrl_top - box_h, panel_w-16, box_h,
+                               0.03, 0.10, 0.02, 0.78)
+        for i, (k, v) in enumerate(ctrl_items):
+            col = i % n_cols
+            row = i // n_cols
+            kx  = px + 16 + col * col_w
+            # tombol di baris atas item
+            key_y  = ctrl_top - 18 - row * row_h_ctrl
+            # deskripsi di baris bawah item
+            desc_y = key_y - 16
+            self._ltext(kx, key_y,  f"[ {k} ]",
+                        0.32, 0.88, 0.22, font=GLUT_BITMAP_8_BY_13)
+            self._ltext(kx, desc_y, v,
+                        0.60, 0.75, 0.50, font=GLUT_BITMAP_8_BY_13)
+
+        # ── Prompt ENTER berkedip ──────────────────────────
+        blink    = 0.5 + 0.5 * math.sin(t * 3.5)
+        prompt   = ">>  TEKAN  ENTER  UNTUK  MULAI  <<"
+        prompt_x = px + (panel_w - len(prompt) * 7) // 2
+        prompt_y = py + 10
+        self._ltext(prompt_x, prompt_y, prompt,
+                    0.30*blink, 0.90*blink, 0.20*blink,
+                    font=GLUT_BITMAP_8_BY_13)

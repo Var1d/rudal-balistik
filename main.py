@@ -36,12 +36,69 @@
 """
 
 import sys
+import os
 import math
 import time
 import ctypes
 from OpenGL.GL   import *
 from OpenGL.GLU  import *
 from OpenGL.GLUT import *
+
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def _project_path(path):
+    return path if os.path.isabs(path) else os.path.join(_BASE_DIR, path)
+
+# ── Audio (pygame.mixer) ─────────────────────────────────
+try:
+    import pygame.mixer as _mixer
+    _mixer.pre_init(44100, -16, 2, 512)
+    _mixer.init()
+    _AUDIO_OK = True
+except Exception:
+    _AUDIO_OK = False
+
+def _load_sound(path):
+    path = _project_path(path)
+    if not _AUDIO_OK or not os.path.exists(path):
+        return None
+    try:
+        return _mixer.Sound(path)
+    except Exception:
+        return None
+
+def _play_bgm(path):
+    path = _project_path(path)
+    if not _AUDIO_OK or not os.path.exists(path):
+        return
+    try:
+        _mixer.music.load(path)
+        _mixer.music.set_volume(0.45)
+        _mixer.music.play(-1)
+    except Exception:
+        pass
+
+def _play(sfx):
+    if sfx is not None:
+        try:
+            sfx.play()
+        except Exception:
+            pass
+
+def _stop_music():
+    if not _AUDIO_OK:
+        return
+    try:
+        _mixer.music.fadeout(800)
+    except Exception:
+        pass
+
+# Preload SFX
+_sfx_type    = None
+_sfx_beep    = None
+_sfx_alert   = None
+_sfx_launch  = None
+_sfx_explode = None
 
 # State input untuk free cam
 mouse_locked = [True]
@@ -79,9 +136,10 @@ DT         = 0.008
 # ────────────────────────────────────────────────────────
 #  State simulasi
 # ────────────────────────────────────────────────────────
+LANDING = -1
 IDLE, LAUNCHING, FLYING, EXPLODING, FINISHED = 0, 1, 2, 3, 4
 
-state      = IDLE
+state      = LANDING
 sim_t      = 0.0
 launch_t   = 0.0
 explode_t  = 0.0
@@ -151,7 +209,8 @@ def get_dt():
 def reset_sim():
     global state, sim_t, launch_t, explode_t, t_flight
     global missile_x, missile_y, frame_cnt
-    keep_idle_free_cam = state == IDLE and camera.mode == CAM_FREE
+    # Simpan posisi FREE cam sebelum reset
+    was_free_cam = camera.mode == CAM_FREE
     state      = LAUNCHING
     sim_t      = 0.0
     launch_t   = 0.0
@@ -161,7 +220,8 @@ def reset_sim():
     missile_y  = 0.05
     frame_cnt  = 0
     particles.reset()
-    if not keep_idle_free_cam:
+    # Jangan reset kamera jika sedang di FREE mode
+    if not was_free_cam:
         camera.reset()
     camera.trigger_shake(0.10)
     if renderer is not None:
@@ -191,6 +251,7 @@ def on_timer(value):
         if launch_t >= 0.3:
             state = FLYING
             sim_t = 0.0
+            _play(_sfx_launch)
         glutTimerFunc(TIMER_MS, on_timer, 0)
 
     elif state == FLYING:
@@ -226,6 +287,7 @@ def on_timer(value):
             camera.trigger_shake(0.42)
             if renderer is not None:
                 renderer.trigger_impact(target_x)
+            _play(_sfx_explode)
             state     = EXPLODING
             explode_t = 0.0
         elif sim_t >= t_flight or pos_y(sim_t) <= 0.0:
@@ -235,6 +297,7 @@ def on_timer(value):
             camera.trigger_shake(0.42)
             if renderer is not None:
                 renderer.trigger_impact(missile_x)
+            _play(_sfx_explode)
             state     = EXPLODING
             explode_t = 0.0
         glutTimerFunc(TIMER_MS, on_timer, 0)
@@ -260,6 +323,11 @@ def on_timer(value):
 # ────────────────────────────────────────────────────────
 def display():
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+
+    if state == LANDING or renderer._fading or renderer._countdown:
+        renderer.render_landing()
+        glutSwapBuffers()
+        return
 
     w = glutGet(GLUT_WINDOW_WIDTH)
     h = glutGet(GLUT_WINDOW_HEIGHT)
@@ -303,6 +371,7 @@ def display():
 
 
 def idle_update():
+    global state
     now = time.perf_counter()
     dt = min(0.05, now - last_idle_time[0])
     last_idle_time[0] = now
@@ -315,6 +384,50 @@ def idle_update():
             camera._free_move['shift'] = is_shift
         except:
             pass
+
+    if state == LANDING or renderer._fading or renderer._countdown:
+        renderer._star_time += dt
+
+        # Typewriter: maju satu huruf tiap _type_speed detik
+        if not renderer._type_done:
+            renderer._type_timer += dt
+            if renderer._type_timer >= renderer._type_speed:
+                renderer._type_timer  = 0.0
+                renderer._type_index += 1
+                _play(_sfx_type)
+                TITLE_LEN = len("SIMULASI PELUNCURAN RUDAL BALISTIK 3D")
+                if renderer._type_index >= TITLE_LEN:
+                    renderer._type_index = TITLE_LEN
+                    renderer._type_done  = True
+
+        # Countdown
+        if renderer._countdown:
+            prev = int(math.ceil(max(renderer._countdown_val, 0.0)))
+            renderer._countdown_val -= dt
+            curr = int(math.ceil(max(renderer._countdown_val, 0.0)))
+            # Beep tiap angka berganti
+            if curr < prev and curr > 0:
+                _play(_sfx_beep)
+            # Alert saat LUNCURKAN muncul
+            if renderer._countdown_val <= 0.0 and prev > 0:
+                _play(_sfx_alert)
+            if renderer._countdown_val <= -0.6:
+                renderer._countdown  = False
+                renderer._fading     = True
+                renderer._fade_alpha = 0.0
+                _stop_music()
+
+        # Fade
+        if renderer._fading:
+            renderer._fade_alpha += dt / 0.6
+            if renderer._fade_alpha >= 1.0:
+                renderer._fade_alpha = 0.0
+                renderer._fading     = False
+                state = IDLE
+                unlock_mouse()
+
+        glutPostRedisplay()
+        return
 
     # Saat simulasi belum berjalan / sudah selesai, timer fisika tidak aktif.
     # Free-cam tetap perlu update supaya mouse dan WASD terasa langsung.
@@ -336,7 +449,21 @@ def reshape(w, h):
 #  Keyboard
 # ────────────────────────────────────────────────────────
 def keyboard(key, x, y):
-    global cam_dist, cam_angle
+    global state
+    # Tangani input di landing page
+    if state == LANDING:
+        if key in (b'\r', b'\n'):
+            if not renderer._countdown:
+                # Skip typewriter jika belum selesai, lalu mulai countdown
+                renderer._type_done  = True
+                renderer._type_index = len("SIMULASI PELUNCURAN RUDAL BALISTIK 3D")
+                renderer._countdown     = True
+                renderer._countdown_val = 3.0
+        elif key == b'\x1b':
+            sys.exit(0)
+        glutPostRedisplay()
+        return
+
     # WASD untuk free cam
     if camera.mode == CAM_FREE:
         camera.free_cam_key(key, True)
@@ -421,7 +548,7 @@ def mouse_click(button, state_btn, x, y):
 #  Main
 # ────────────────────────────────────────────────────────
 def main():
-    global renderer
+    global renderer, _sfx_type, _sfx_beep, _sfx_alert, _sfx_launch, _sfx_explode
 
     print("=" * 56)
     print("  OPENGL_RUDAL – Kelompok 58 – UNSIL 2026")
@@ -455,9 +582,16 @@ def main():
     renderer = SceneRenderer()
     renderer.init()
 
-    # Initial lock if free cam
-    if camera.mode == CAM_FREE:
-        lock_mouse()
+    # Load audio
+    _play_bgm("sound/Brirfing_theme.wav")
+    _sfx_type    = _load_sound("sound/type.wav")
+    _sfx_beep    = _load_sound("sound/beep.wav")
+    _sfx_alert   = _load_sound("sound/alert.wav")
+    _sfx_launch  = _load_sound("sound/launch.wav")
+    _sfx_explode = _load_sound("sound/explode.wav")
+
+    # Cursor visible di landing page
+    unlock_mouse()
 
     glutDisplayFunc(display)
     glutReshapeFunc(reshape)

@@ -170,25 +170,68 @@ class Camera:
 
     # ── Mode ──────────────────────────────────────────────
     def set_mode(self, mode):
+        old_mode = self.mode
         self.mode = mode
         print(f"[KAMERA] {CAM_NAMES[mode]}")
+        
+        # Jika switch KE FREE dari mode lain, sinkronkan eye/look dengan free_pos
+        if mode == CAM_FREE and old_mode != CAM_FREE:
+            yaw_rad = math.radians(self.free_yaw)
+            pitch_rad = math.radians(self.free_pitch)
+            forward = [
+                math.cos(pitch_rad) * math.sin(yaw_rad),
+                math.sin(pitch_rad),
+                -math.cos(pitch_rad) * math.cos(yaw_rad)
+            ]
+            self.eye = list(self.free_pos)
+            self.look = [
+                self.free_pos[0] + forward[0],
+                self.free_pos[1] + forward[1],
+                self.free_pos[2] + forward[2],
+            ]
+            self._t_eye = list(self.eye)
+            self._t_look = list(self.look)
 
     def reset(self):
+        # Reset semua mode KECUALI posisi DAN arah pandang FREE cam
+        old_free_pos = list(self.free_pos)
+        old_free_yaw = self.free_yaw
+        old_free_pitch = self.free_pitch
+        old_free_target_yaw = self._free_target_yaw
+        old_free_target_pitch = self._free_target_pitch
+        
         self.mode       = CAM_FREE
         self.dist       = 14.0
         self.angle      = 30.0
         self._orbit_ang = 30.0
         self.shake_amp  = 0.0
         self.shake_x = self.shake_y = self.shake_z = 0.0
-        self.eye  = [0.0, 7.0, 14.0]
-        self.look = [0.0, 0.8,  0.0]
-        self._t_eye  = [0.0, 7.0, 14.0]
-        self._t_look = [0.0, 0.8,  0.0]
-        self.free_pos = [0.0, 7.0, 14.0]
-        self.free_yaw = 0.0
-        self.free_pitch = 0.0
-        self._free_target_yaw = 0.0
-        self._free_target_pitch = 0.0
+        
+        # Kembalikan posisi DAN arah pandang FREE cam
+        self.free_pos = old_free_pos
+        self.free_yaw = old_free_yaw
+        self.free_pitch = old_free_pitch
+        self._free_target_yaw = old_free_target_yaw
+        self._free_target_pitch = old_free_target_pitch
+        
+        # Update eye dan look berdasarkan posisi FREE yang tersimpan
+        yaw_rad = math.radians(self.free_yaw)
+        pitch_rad = math.radians(self.free_pitch)
+        forward = [
+            math.cos(pitch_rad) * math.sin(yaw_rad),
+            math.sin(pitch_rad),
+            -math.cos(pitch_rad) * math.cos(yaw_rad)
+        ]
+        self.eye = list(self.free_pos)
+        self.look = [
+            self.free_pos[0] + forward[0],
+            self.free_pos[1] + forward[1],
+            self.free_pos[2] + forward[2],
+        ]
+        self._t_eye = list(self.eye)
+        self._t_look = list(self.look)
+        
+        # Reset velocity dan input state saja
         self.free_vel = [0.0, 0.0, 0.0]
         for key in self._free_move:
             self._free_move[key] = False
@@ -225,13 +268,23 @@ class Camera:
             self._t_look = [target_x, 0.0, 0.0]
 
         elif self.mode == CAM_ORBIT:
-            self._orbit_ang += 18.0 * dt
+            self._orbit_ang += 36.0 * dt  # Dipercepat dari 18.0 ke 36.0 (2x lebih cepat)
             rad = math.radians(self._orbit_ang)
-            cx  = target_x * 0.5
-            self._t_eye  = [cx + self.dist * math.sin(rad),
-                             self.dist * 0.45,
+            # Fokus dinamis berdasarkan state simulasi
+            if state_sim == FLYING:
+                # Saat terbang: fokus ke rudal
+                focus_x, focus_y = mx, my
+            elif state_sim in (EXPLODING, FINISHED):
+                # Saat meledak/selesai: fokus ke titik ledakan (posisi rudal terakhir)
+                focus_x, focus_y = mx, 0.1  # Sedikit di atas tanah
+            else:
+                # Saat idle/launching: fokus ke tengah scene
+                focus_x, focus_y = target_x * 0.5, 0.8
+            
+            self._t_eye  = [focus_x + self.dist * math.sin(rad),
+                             focus_y + self.dist * 0.45,
                              self.dist * math.cos(rad)]
-            self._t_look = [cx, 0.8, 0.0]
+            self._t_look = [focus_x, focus_y, 0.0]
 
         # Auto-switch saat meledak
         if state_sim == EXPLODING and self.mode == CAM_CHASE:
