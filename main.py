@@ -78,9 +78,10 @@ def _play_bgm(path):
     except Exception:
         pass
 
-def _play(sfx):
+def _play(sfx, volume=1.0):
     if sfx is not None:
         try:
+            sfx.set_volume(volume)
             sfx.play()
         except Exception:
             pass
@@ -93,11 +94,27 @@ def _stop_music():
     except Exception:
         pass
 
+def _play_loop(sfx, volume=1.0):
+    if sfx is not None:
+        try:
+            sfx.set_volume(volume)
+            sfx.play(-1)  # -1 = infinite loop
+        except Exception:
+            pass
+
+def _stop_loop(sfx):
+    if sfx is not None:
+        try:
+            sfx.stop()
+        except Exception:
+            pass
+
 # Preload SFX
 _sfx_type    = None
 _sfx_beep    = None
 _sfx_alert   = None
 _sfx_launch  = None
+_sfx_rocket_loop = None
 _sfx_explode = None
 
 # State input untuk free cam
@@ -248,7 +265,8 @@ def on_timer(value):
         if launch_t >= 0.3:
             state = FLYING
             sim_t = 0.0
-            _play(_sfx_launch)
+            _play(_sfx_launch, volume=0.4)
+            _play_loop(_sfx_rocket_loop, volume=1.2)
         glutTimerFunc(TIMER_MS, on_timer, 0)
 
     elif state == FLYING:
@@ -284,7 +302,8 @@ def on_timer(value):
             camera.trigger_shake(0.42)
             if renderer is not None:
                 renderer.trigger_impact(target_x)
-            _play(_sfx_explode)
+            _stop_loop(_sfx_rocket_loop)
+            _play(_sfx_explode, volume=0.5)
             state     = EXPLODING
             explode_t = 0.0
         elif sim_t >= t_flight or pos_y(sim_t) <= 0.0:
@@ -294,7 +313,8 @@ def on_timer(value):
             camera.trigger_shake(0.42)
             if renderer is not None:
                 renderer.trigger_impact(missile_x)
-            _play(_sfx_explode)
+            _stop_loop(_sfx_rocket_loop)
+            _play(_sfx_explode, volume=0.5)
             state     = EXPLODING
             explode_t = 0.0
         glutTimerFunc(TIMER_MS, on_timer, 0)
@@ -485,6 +505,7 @@ def keyboard(key, x, y):
     elif key == b'\x7f':  # DELETE key
         # DELETE: Stop simulasi dan kembali ke IDLE
         if state in (LAUNCHING, FLYING, EXPLODING):
+            _stop_loop(_sfx_rocket_loop)
             state = IDLE
             particles.reset()
             if renderer is not None:
@@ -561,7 +582,7 @@ def mouse_click(button, state_btn, x, y):
 #  Main
 # ────────────────────────────────────────────────────────
 def main():
-    global renderer, _sfx_type, _sfx_beep, _sfx_alert, _sfx_launch, _sfx_explode
+    global renderer, _sfx_type, _sfx_beep, _sfx_alert, _sfx_launch, _sfx_rocket_loop, _sfx_explode
 
     print("=" * 56)
     print("  OPENGL_RUDAL – Kelompok 58 – UNSIL 2026")
@@ -600,8 +621,9 @@ def main():
     _sfx_type    = _load_sound("sound/type.wav")
     _sfx_beep    = _load_sound("sound/beep.wav")
     _sfx_alert   = _load_sound("sound/alert.wav")
-    _sfx_launch  = _load_sound("sound/launch.wav")
-    _sfx_explode = _load_sound("sound/explode.wav")
+    _sfx_launch  = _load_sound("sound/Missile Launch.wav")
+    _sfx_rocket_loop = _load_sound("sound/rocket-flight-loop.wav")
+    _sfx_explode = _load_sound("sound/explosion.wav")
 
     # Cursor visible di landing page
     unlock_mouse()
