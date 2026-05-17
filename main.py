@@ -266,7 +266,7 @@ def on_timer(value):
             state = FLYING
             sim_t = 0.0
             _play(_sfx_launch, volume=0.4)
-            _play_loop(_sfx_rocket_loop, volume=1.2)
+            _play_loop(_sfx_rocket_loop, volume=2.0)
         glutTimerFunc(TIMER_MS, on_timer, 0)
 
     elif state == FLYING:
